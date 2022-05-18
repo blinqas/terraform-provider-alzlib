@@ -22,12 +22,7 @@ builds:
     - darwin
   goarch:
     - amd64
-    - '386'
-    - arm
     - arm64
-  ignore:
-    - goos: darwin
-      goarch: '386'
   binary: '{{ .ProjectName }}_v{{ .Version }}'
 archives:
 - format: zip
@@ -41,7 +36,7 @@ checksum:
 signs:
   - artifacts: checksum
     args:
-      # if you are using this in a GitHub action or some other automated pipeline, you 
+      # if you are using this in a GitHub action or some other automated pipeline, you
       # need to pass the batch flag to indicate its not interactive.
       - "--batch"
       - "--local-user"
