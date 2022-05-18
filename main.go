@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"log"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/matt-FFFFFF/terraform-provider-alzlib/internal/provider"
 )
 
@@ -27,16 +29,20 @@ var (
 )
 
 func main() {
-	var debugMode bool
+	var debug bool
 
-	flag.BoolVar(&debugMode, "debug", false, "set to true to run the provider with support for debuggers like delve")
+	flag.BoolVar(&debug, "debug", false, "set to true to run the provider with support for debuggers like delve")
 	flag.Parse()
 
-	opts := &plugin.ServeOpts{
-		Debug:        debugMode,
-		ProviderAddr: "registry.terraform.io/matt-FFFFFF/alzlib",
-		ProviderFunc: provider.New(version),
+	opts := providerserver.ServeOpts{
+		// TODO: Update this string with the published name of your provider.
+		Address: "registry.terraform.io/matt-FFFFFF/alzlib",
+		Debug:   debug,
 	}
 
-	plugin.Serve(opts)
+	err := providerserver.Serve(context.Background(), provider.New(version), opts)
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 }

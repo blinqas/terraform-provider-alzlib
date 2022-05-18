@@ -1,7 +1,8 @@
-# This GitHub action runs your tests for each commit push and/or PR. Optionally
-# you can turn it on using a cron schedule for regular testing.
-#
+# Terraform Provider testing workflow.
 name: Tests
+
+# This GitHub action runs your tests for each pull request and push.
+# Optionally, you can turn it on using a schedule for regular testing.
 on:
   pull_request:
     paths-ignore:
@@ -9,43 +10,37 @@ on:
   push:
     paths-ignore:
       - 'README.md'
-  # For systems with an upstream API that could drift unexpectedly (like most SaaS systems, etc.),
-  # we recommend testing at a regular interval not necessarily tied to code changes. This will
-  # ensure you are alerted to something breaking due to an API change, even if the code did not
-  # change.
-  # schedule:
-  #   - cron: '0 13 * * *'
+
+# Testing only needs permissions to read the repository contents.
+permissions:
+  contents: read
+
+# Default values to simplify job configurations below.
+env:
+  # Go language version to use for building. This value should also be updated
+  # in the release workflow if changed.
+  GO_VERSION: '1.18.x'
+
 jobs:
-  # ensure the code builds...
+  # Ensure project builds before running testing matrix
   build:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: '1.18.x'
-      id: go
-
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
-
-    - name: Get dependencies
-      run: |
-        go mod download
-
-    - name: Build
-      run: |
-        go build -v .
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/checkout@v3
+      - run: go mod download
+      - run: go build -v .
 
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.18.x'
+          go-version: ${{ env.GO_VERSION }}
       - uses: actions/checkout@v3
       - run: go generate ./...
       - name: git diff
@@ -53,9 +48,9 @@ jobs:
           git diff --compact-summary --exit-code || \
             (echo; echo "Unexpected difference in directories after code generation. Run 'go generate ./...' command and commit."; exit 1)
 
-  # run acceptance tests in a matrix with Terraform core versions
+  # Run acceptance tests in a matrix with Terraform CLI versions
   test:
-    name: Matrix Test
+    name: Terraform Provider Acceptance Tests
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -67,34 +62,16 @@ jobs:
           - '1.0.*'
           - '1.1.*'
     steps:
-
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: '1.18.x'
-      id: go
-
-    - uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_version: ${{ matrix.terraform }}
-        terraform_wrapper: false
-
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
-
-    - name: Get dependencies
-      run: |
-        go mod download
-
-    - name: TF acceptance tests
-      timeout-minutes: 10
-      env:
-        TF_ACC: "1"
-
-        # Set whatever additional acceptance test env vars here. You can
-        # optionally use data from your repository secrets using the
-        # following syntax:
-        # SOME_VAR: ${{ secrets.SOME_VAR }}
-
-      run: |
-        go test -v -cover ./internal/provider/
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ matrix.terraform }}
+          terraform_wrapper: false
+      - uses: actions/checkout@v3
+      - run: go mod download
+      - env:
+          TF_ACC: "1"
+        run: go test -v -cover ./internal/provider/
+        timeout-minutes: 10

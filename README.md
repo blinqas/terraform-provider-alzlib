@@ -1,6 +1,6 @@
 # ALZLib Terraform Provider
 
-_This provider is built on the [Terraform Plugin SDK](https://github.com/hashicorp/terraform-plugin-sdk)._
+_This provider is built on the [Terraform Plugin Framework](https://github.com/hashicorp/terraform-plugin-framework)._
 
 The ALZLib provider uses the [ALZLib](https://github.com/matt-FFFFFF/alzlib) library to provide ALZ archetype data resources to Terraform.
 
