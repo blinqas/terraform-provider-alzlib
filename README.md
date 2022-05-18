@@ -2,7 +2,7 @@
 
 _This provider is built on the [Terraform Plugin SDK](https://github.com/hashicorp/terraform-plugin-sdk)._
 
-The ALZLib provider uses the [ALZLib](https://github.com/matt-FFFFFF/alzlib) library to provide data ALZ archetype data resources to Terraform.
+The ALZLib provider uses the [ALZLib](https://github.com/matt-FFFFFF/alzlib) library to provide ALZ archetype data resources to Terraform.
 
 The data sources resources that it produces are complex objects, with nested maps.
 This output is designed to be used with a Terraform module that will process this data to deploy resources.
