@@ -11,7 +11,7 @@ import (
 
 // Ensure provider defined types fully satisfy framework interfaces
 var _ tfsdk.DataSourceType = archetypesDataSourceType{}
-var _ tfsdk.DataSource = exampleDataSource{}
+var _ tfsdk.DataSource = archetypesDataSource{}
 
 type archetypesDataSourceType struct{}
 
