@@ -37,7 +37,7 @@ func New(version string) func() *schema.Provider {
 			},
 
 			DataSourcesMap: map[string]*schema.Resource{
-				"alzlib_archetypes": dataSourceArchetypes(),
+				"alzlib_archetypes": dataSourceArchetype(),
 			},
 		}
 

@@ -1,3 +1,3 @@
 provider "scaffolding" {
-  # example configuration here
+  directory = "${path.root}/lib"
 }
