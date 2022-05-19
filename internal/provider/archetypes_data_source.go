@@ -19,19 +19,22 @@ type archetypesDataSourceType struct{}
 func (t archetypesDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Example data source",
+		MarkdownDescription: "Archetypes data from the provider",
 
 		Attributes: map[string]tfsdk.Attribute{
+			// The 'id' attribute is needed for acceptance testing
+			"id": {
+				Type:     types.Int64Type,
+				Computed: true,
+			},
 			"data": {
-				Type: types.ObjectType{
-					AttrTypes: map[string]attr.Type{
-						"name": types.StringType,
-						// "policy_definitions": types.ObjectType{
-						// 	AttrTypes: map[string]attr.Type{
-						// 		"name":         types.StringType,
-						// 		"display_name": types.StringType,
-						// 	},
-						// },
+				Computed: true,
+				Type: types.MapType{
+					ElemType: types.ObjectType{
+						AttrTypes: map[string]attr.Type{
+							"name":               types.StringType,
+							"policy_definitions": policyDefinitionType(),
+						},
 					},
 				},
 			},
@@ -48,17 +51,17 @@ func (t archetypesDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pr
 }
 
 type archetypesDataSourceData struct {
-	Data archetypesDataSourceDataData `tfsdk:"data"`
+	Id   int64                                   `tfsdk:"id"`
+	Data map[string]archetypesDataSourceDataData `tfsdk:"data"`
 }
 
 type archetypesDataSourceDataData struct {
-	Name types.String `tfsdk:"name"`
-	//PolicyDefinitions archetypesDataSourceDataDataPolicyDefinitions `tfsdk:"policy_definitions"`
+	Name              types.String                                             `tfsdk:"name"`
+	PolicyDefinitions map[string]archetypesDataSourceDataDataPolicyDefinitions `tfsdk:"policy_definitions"`
 }
 
 type archetypesDataSourceDataDataPolicyDefinitions struct {
-	Name        types.String `tfsdk:"name"`
-	DisplayName types.String `tfsdk:"display_name"`
+	Name types.String `tfsdk:"name"`
 }
 
 type archetypesDataSource struct {
@@ -68,8 +71,9 @@ type archetypesDataSource struct {
 func (d archetypesDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest, resp *tfsdk.ReadDataSourceResponse) {
 	var data archetypesDataSourceData
 
-	diags := req.Config.Get(ctx, &data)
-	resp.Diagnostics.Append(diags...)
+	//diags := req.Config.Get(ctx, &data)
+
+	//resp.Diagnostics.Append(diags...)
 
 	log.Printf("got here")
 
@@ -89,21 +93,36 @@ func (d archetypesDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 	//     return
 	// }
 
-	// ddpd := archetypesDataSourceDataDataPolicyDefinitions{
-	// 	Name:        types.String{Value: "example"},
-	// 	DisplayName: types.String{Value: "Example"},
-	// }
+	ddpd := archetypesDataSourceDataDataPolicyDefinitions{
+		Name: types.String{Value: "testpdname"},
+	}
+
+	pdValue := make(map[string]archetypesDataSourceDataDataPolicyDefinitions)
+	pdValue["testpd"] = ddpd
 
 	dd := archetypesDataSourceDataData{
-		Name: types.String{Value: "namevalue"},
-		//PolicyDefinitions: ddpd,
+		Name:              types.String{Value: "namevalue"},
+		PolicyDefinitions: pdValue,
 	}
 	// For the purposes of this example code, hardcoding a response value to
 	// save into the Terraform state.
 	dataValue := make(map[string]archetypesDataSourceDataData)
+
 	dataValue["test"] = dd
-	data.Data = dd
+	data.Data = dataValue
+	data.Id = 234
+	diags := resp.State.Set(ctx, data)
 
 	//diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
+}
+
+func policyDefinitionType() types.MapType {
+	return types.MapType{
+		ElemType: types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"name": types.StringType,
+			},
+		},
+	}
 }

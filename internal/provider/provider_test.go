@@ -21,6 +21,6 @@ func testAccPreCheck(t *testing.T) {
 	// about the appropriate environment variables being set are common to see in a pre-check
 	// function.
 	if os.Getenv("ALZLIB_DIR") == "" {
-		t.Fatal("ALZLIB_DIR must be set for acceptance tests")
+		t.Skip("Acceptance tests skipped unless env 'ALZLIB_DIR' set")
 	}
 }

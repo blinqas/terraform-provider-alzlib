@@ -45,7 +45,8 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	resp.Diagnostics.Append(diags...)
 
 	// Initialize the AlzLib client
-	dir := data.Directory.Value
+	var dir string
+	dir = data.Directory.Value
 
 	if os.Getenv("ALZLIB_DIR") != "" {
 		dir = os.Getenv("ALZLIB_DIR")

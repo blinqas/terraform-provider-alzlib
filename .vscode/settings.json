@@ -1,6 +1,6 @@
 {
   "go.testEnvVars": {
     "TF_ACC": "1",
-    "ALZLIB_DIR": "~/code/alzlib/testdata/doesnotexist"
+    "ALZLIB_DIR": "/Users/matt/code/terraform-provider-alzlib/testdata/lib"
   }
 }

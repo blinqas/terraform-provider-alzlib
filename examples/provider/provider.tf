@@ -1,3 +1,3 @@
-provider "scaffolding" {
-  # example configuration here
+provider "alzlib" {
+  directory = "${path.root}/lib"
 }

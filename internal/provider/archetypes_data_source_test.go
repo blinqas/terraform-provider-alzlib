@@ -15,7 +15,7 @@ func TestAccArchetypesDataSource(t *testing.T) {
 			{
 				Config: testAccArchetypesDataSourceConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.alzlib_archetypes.test", "id", "example-id"),
+					resource.TestCheckResourceAttr("data.alzlib_archetypes.test", "data.test.name", "namevalue"),
 				),
 			},
 		},
