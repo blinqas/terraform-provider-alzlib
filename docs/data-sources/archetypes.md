@@ -21,22 +21,23 @@ data "alzlib_archetypes" "test" {}
 
 ### Read-Only
 
-- `data` (Map of Object) (see [below for nested schema](#nestedatt--data))
+- `archetypes` (Map of Object) (see [below for nested schema](#nestedatt--archetypes))
 - `id` (Number) The ID of this resource.
 
-<a id="nestedatt--data"></a>
-### Nested Schema for `data`
+<a id="nestedatt--archetypes"></a>
+### Nested Schema for `archetypes`
 
 Read-Only:
 
 - `name` (String)
-- `policy_definitions` (Map of Object) (see [below for nested schema](#nestedobjatt--data--policy_definitions))
+- `policy_definitions` (Map of Object) (see [below for nested schema](#nestedobjatt--archetypes--policy_definitions))
 
-<a id="nestedobjatt--data--policy_definitions"></a>
-### Nested Schema for `data.policy_definitions`
+<a id="nestedobjatt--archetypes--policy_definitions"></a>
+### Nested Schema for `archetypes.policy_definitions`
 
 Read-Only:
 
+- `display_name` (String)
 - `name` (String)
 
 
