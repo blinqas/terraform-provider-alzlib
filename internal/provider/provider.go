@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -44,7 +45,21 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	resp.Diagnostics.Append(diags...)
 
 	// Initialize the AlzLib client
-	c, err := alzlib.NewAlzLib(data.Directory.Value)
+	dir := data.Directory.Value
+
+	if os.Getenv("ALZLIB_DIR") != "" {
+		dir = os.Getenv("ALZLIB_DIR")
+	}
+
+	if dir == "" {
+		resp.Diagnostics.AddError(
+			"alzlib directory not set",
+			"Either set the `directory` property of the provider configuration, or set the `ALZLIB_DIR` environment variable.",
+		)
+		return
+	}
+
+	c, err := alzlib.NewAlzLib(dir)
 	if err != nil {
 		resp.Diagnostics.AddError("error configuring provider", err.Error())
 	}
@@ -69,9 +84,9 @@ func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSou
 func (p *provider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		Attributes: map[string]tfsdk.Attribute{
-			"example": {
-				MarkdownDescription: "Example provider attribute",
-				Optional:            true,
+			"directory": {
+				MarkdownDescription: "Directory containing ALZ lib files",
+				Optional:            true, //can be set using ALZLIB_DIR env var
 				Type:                types.StringType,
 			},
 		},

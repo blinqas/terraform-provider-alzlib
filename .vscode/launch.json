@@ -13,6 +13,7 @@
             "program": "${fileDirname}",
             "env": {
                 "TF_ACC": "1",
+                "ALZLIB_DIR": "~/code/alzlib/testdata/lib"
             },
             "args": [],
         },

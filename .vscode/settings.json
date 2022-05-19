@@ -1,0 +1,6 @@
+{
+  "go.testEnvVars": {
+    "TF_ACC": "1",
+    "ALZLIB_DIR": "~/code/alzlib/testdata/doesnotexist"
+  }
+}

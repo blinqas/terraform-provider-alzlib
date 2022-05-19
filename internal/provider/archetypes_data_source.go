@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -21,15 +22,18 @@ func (t archetypesDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, 
 		MarkdownDescription: "Example data source",
 
 		Attributes: map[string]tfsdk.Attribute{
-			"configurable_attribute": {
-				MarkdownDescription: "Example configurable attribute",
-				Optional:            true,
-				Type:                types.StringType,
-			},
-			"id": {
-				MarkdownDescription: "Example identifier",
-				Type:                types.StringType,
-				Computed:            true,
+			"data": {
+				Type: types.ObjectType{
+					AttrTypes: map[string]attr.Type{
+						"name": types.StringType,
+						// "policy_definitions": types.ObjectType{
+						// 	AttrTypes: map[string]attr.Type{
+						// 		"name":         types.StringType,
+						// 		"display_name": types.StringType,
+						// 	},
+						// },
+					},
+				},
 			},
 		},
 	}, nil
@@ -44,8 +48,17 @@ func (t archetypesDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pr
 }
 
 type archetypesDataSourceData struct {
-	ConfigurableAttribute types.String `tfsdk:"configurable_attribute"`
-	Id                    types.String `tfsdk:"id"`
+	Data archetypesDataSourceDataData `tfsdk:"data"`
+}
+
+type archetypesDataSourceDataData struct {
+	Name types.String `tfsdk:"name"`
+	//PolicyDefinitions archetypesDataSourceDataDataPolicyDefinitions `tfsdk:"policy_definitions"`
+}
+
+type archetypesDataSourceDataDataPolicyDefinitions struct {
+	Name        types.String `tfsdk:"name"`
+	DisplayName types.String `tfsdk:"display_name"`
 }
 
 type archetypesDataSource struct {
@@ -59,6 +72,8 @@ func (d archetypesDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 	resp.Diagnostics.Append(diags...)
 
 	log.Printf("got here")
+
+	// d.provider.client contains the client that was created by the provider server
 
 	if resp.Diagnostics.HasError() {
 		return
@@ -74,10 +89,21 @@ func (d archetypesDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 	//     return
 	// }
 
+	// ddpd := archetypesDataSourceDataDataPolicyDefinitions{
+	// 	Name:        types.String{Value: "example"},
+	// 	DisplayName: types.String{Value: "Example"},
+	// }
+
+	dd := archetypesDataSourceDataData{
+		Name: types.String{Value: "namevalue"},
+		//PolicyDefinitions: ddpd,
+	}
 	// For the purposes of this example code, hardcoding a response value to
 	// save into the Terraform state.
-	data.Id = types.String{Value: "example-id"}
+	dataValue := make(map[string]archetypesDataSourceDataData)
+	dataValue["test"] = dd
+	data.Data = dd
 
-	diags = resp.State.Set(ctx, &data)
+	//diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
 }
