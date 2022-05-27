@@ -10,10 +10,10 @@
             "request": "launch",
             "mode": "test",
             // this assumes your workspace is the root of the repo
-            "program": "${fileDirname}",
+            "program": "${workspaceFolder}",
             "env": {
                 "TF_ACC": "1",
-                "ALZLIB_DIR": "~/code/alzlib/testdata/lib"
+                "ALZLIB_DIR": "${workspaceFolder}/testdata/lib"
             },
             "args": [],
         },
@@ -27,8 +27,9 @@
             "env": {},
             "args": [
                 // pass the debug flag for reattaching
-                "-debug",
+                "-debug=true",
             ],
+            "internalConsoleOptions": "openOnSessionStart"
         }
     ]
 }

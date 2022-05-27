@@ -37,7 +37,13 @@ Read-Only:
 
 Read-Only:
 
+- `description` (String)
 - `display_name` (String)
+- `metadata` (String)
+- `mode` (String)
 - `name` (String)
+- `parameters` (String)
+- `policy_rule` (String)
+- `policy_type` (String)
 
 

@@ -22,11 +22,21 @@ This output is designed to be used with a Terraform module that will process thi
 go install
 ```
 
-Then commit the changes to `go.mod` and `go.sum`.
-
 ## Using the provider
 
-_TBC_
+```terraform
+provider "alzlib" {
+  source = "matt-FFFFFF/alzlib"
+  version = "0.1.0"
+  directory = "./path/to/alzlib/directory"
+}
+
+data "alzlib_archetypes" "prod" {}
+
+output "archetypes" {
+  value = data.alzlib_archetypes.prod.archetypes
+}
+```
 
 ## Developing the Provider
 
