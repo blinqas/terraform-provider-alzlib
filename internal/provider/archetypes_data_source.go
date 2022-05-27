@@ -1,8 +1,12 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armpolicy"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -47,6 +51,12 @@ func policyDefinitionType() types.MapType {
 			AttrTypes: map[string]attr.Type{
 				"name":         types.StringType,
 				"display_name": types.StringType,
+				"policy_type":  types.StringType,
+				"mode":         types.StringType,
+				"description":  types.StringType,
+				"policy_rule":  types.StringType,
+				"metadata":     types.StringType,
+				"parameters":   types.StringType,
 			},
 		},
 	}
@@ -89,9 +99,37 @@ func (d archetypesDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 
 	archs := make(map[string]archetypeData)
 
-	for k, _ := range d.provider.client.Archetypes {
-		archs[k] = archetypeData{
-			Name: types.String{Value: k},
+	for ak := range d.provider.client.Archetypes {
+		archs[ak] = archetypeData{
+			Name:              types.String{Value: ak},
+			PolicyDefinitions: map[string]policyDefinitionsData{},
+		}
+
+		for pdk, pdv := range d.provider.client.Archetypes[ak].PolicyDefinitions {
+			pdd := policyDefinitionsData{
+				Name:        types.String{Value: pdk},
+				DisplayName: types.String{Value: *pdv.Properties.DisplayName},
+				PolicyType:  types.String{Value: *pdv.Type},
+				Mode:        types.String{Value: *pdv.Properties.Mode},
+				Description: types.String{Value: *pdv.Properties.Description},
+			}
+
+			policyRule := pdv.Properties.PolicyRule.(map[string]interface{})
+			policyRuleStr := flattenJSON(policyRule)
+			if policyRuleStr == "" {
+				resp.Diagnostics.AddError(fmt.Sprintf("Error generating archetype %s", ak), fmt.Sprintf("Unable to read policy rule in policy definition %s", pdk))
+			}
+			pdd.PolicyRule = types.String{Value: policyRuleStr}
+
+			pdd.Metadata = types.String{Value: flattenJSON(pdv.Properties.Metadata)}
+
+			parametersStr, err := flattenParameterDefinitionsValueToString(pdv.Properties.Parameters)
+			if err != nil {
+				resp.Diagnostics.AddError(fmt.Sprintf("Error generating archetype %s", ak), fmt.Sprintf("Unable to read policy parameters in policy definition %s", pdk))
+			}
+			pdd.Parameters = types.String{Value: parametersStr}
+
+			archs[ak].PolicyDefinitions[pdk] = pdd
 		}
 	}
 
@@ -99,4 +137,22 @@ func (d archetypesDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 	diags := resp.State.Set(ctx, &data)
 
 	resp.Diagnostics.Append(diags...)
+}
+
+func flattenParameterDefinitionsValueToString(input map[string]*armpolicy.ParameterDefinitionsValue) (string, error) {
+	if len(input) == 0 {
+		return "", nil
+	}
+
+	result, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+
+	compactJson := bytes.Buffer{}
+	if err := json.Compact(&compactJson, result); err != nil {
+		return "", err
+	}
+
+	return compactJson.String(), nil
 }

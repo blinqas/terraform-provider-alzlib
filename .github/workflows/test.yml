@@ -74,5 +74,6 @@ jobs:
       - run: go mod download
       - env:
           TF_ACC: "1"
+          ALZLIB_DIR: ${{ github.workspace }}/testdata/lib
         run: go test -v -cover ./internal/provider/
         timeout-minutes: 10
