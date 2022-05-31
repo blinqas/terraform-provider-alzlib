@@ -3,17 +3,17 @@ module github.com/matt-FFFFFF/terraform-provider-alzlib
 go 1.18
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armpolicy v0.6.0
 	github.com/hashicorp/terraform-plugin-docs v0.8.1
 	github.com/hashicorp/terraform-plugin-framework v0.8.0
 	github.com/hashicorp/terraform-plugin-go v0.9.1
-	github.com/hashicorp/terraform-plugin-sdk/v2 v2.16.0
+	github.com/hashicorp/terraform-plugin-sdk/v2 v2.17.0
 	github.com/matt-FFFFFF/alzlib v0.1.2
 )
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armpolicy v0.6.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.2 // indirect
