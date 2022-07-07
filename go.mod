@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework v0.9.0
 	github.com/hashicorp/terraform-plugin-go v0.10.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.18.0
-	github.com/matt-FFFFFF/alzlib v0.1.2
+	github.com/matt-FFFFFF/alzlib v0.3.0
 )
 
 require (
