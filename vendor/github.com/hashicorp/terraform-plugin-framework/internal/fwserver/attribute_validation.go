@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/internal/fwschema"
+	"github.com/hashicorp/terraform-plugin-framework/internal/fwschema/fwxschema"
+	"github.com/hashicorp/terraform-plugin-framework/internal/fwschemadata"
 	"github.com/hashicorp/terraform-plugin-framework/internal/logging"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -15,10 +18,10 @@ import (
 // The extra Attribute parameter is a carry-over of creating the proto6server
 // package from the tfsdk package and not wanting to export the method.
 // Reference: https://github.com/hashicorp/terraform-plugin-framework/issues/365
-func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.ValidateAttributeRequest, resp *tfsdk.ValidateAttributeResponse) {
+func AttributeValidate(ctx context.Context, a fwschema.Attribute, req tfsdk.ValidateAttributeRequest, resp *tfsdk.ValidateAttributeResponse) {
 	ctx = logging.FrameworkWithAttributePath(ctx, req.AttributePath.String())
 
-	if (a.Attributes == nil || len(a.Attributes.GetAttributes()) == 0) && a.Type == nil {
+	if (a.GetAttributes() == nil || len(a.GetAttributes().GetAttributes()) == 0) && a.GetType() == nil {
 		resp.Diagnostics.AddAttributeError(
 			req.AttributePath,
 			"Invalid Attribute Definition",
@@ -28,7 +31,7 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 		return
 	}
 
-	if a.Attributes != nil && len(a.Attributes.GetAttributes()) > 0 && a.Type != nil {
+	if a.GetAttributes() != nil && len(a.GetAttributes().GetAttributes()) > 0 && a.GetType() != nil {
 		resp.Diagnostics.AddAttributeError(
 			req.AttributePath,
 			"Invalid Attribute Definition",
@@ -38,7 +41,7 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 		return
 	}
 
-	if !a.Required && !a.Optional && !a.Computed {
+	if !a.IsRequired() && !a.IsOptional() && !a.IsComputed() {
 		resp.Diagnostics.AddAttributeError(
 			req.AttributePath,
 			"Invalid Attribute Definition",
@@ -48,7 +51,13 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 		return
 	}
 
-	attributeConfig, diags := ConfigGetAttributeValue(ctx, req.Config, req.AttributePath)
+	configData := &fwschemadata.Data{
+		Description:    fwschemadata.DataDescriptionConfiguration,
+		Schema:         req.Config.Schema,
+		TerraformValue: req.Config.Raw,
+	}
+
+	attributeConfig, diags := configData.ValueAtPath(ctx, req.AttributePath)
 	resp.Diagnostics.Append(diags...)
 
 	if diags.HasError() {
@@ -60,7 +69,7 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 	// until Terraform CLI versions 0.12 through the release containing the
 	// checks are considered end-of-life.
 	// Reference: https://github.com/hashicorp/terraform/issues/30669
-	if a.Computed && !a.Optional && !attributeConfig.IsNull() {
+	if a.IsComputed() && !a.IsOptional() && !attributeConfig.IsNull() {
 		resp.Diagnostics.AddAttributeError(
 			req.AttributePath,
 			"Invalid Configuration for Read-Only Attribute",
@@ -74,7 +83,7 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 	// until Terraform CLI versions 0.12 through the release containing the
 	// checks are considered end-of-life.
 	// Reference: https://github.com/hashicorp/terraform/issues/30669
-	if a.Required && attributeConfig.IsNull() {
+	if a.IsRequired() && attributeConfig.IsNull() {
 		resp.Diagnostics.AddAttributeError(
 			req.AttributePath,
 			"Missing Configuration for Required Attribute",
@@ -85,45 +94,35 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 
 	req.AttributeConfig = attributeConfig
 
-	for _, validator := range a.Validators {
-		logging.FrameworkDebug(
-			ctx,
-			"Calling provider defined AttributeValidator",
-			map[string]interface{}{
-				logging.KeyDescription: validator.Description(ctx),
-			},
-		)
-		validator.Validate(ctx, req, resp)
-		logging.FrameworkDebug(
-			ctx,
-			"Called provider defined AttributeValidator",
-			map[string]interface{}{
-				logging.KeyDescription: validator.Description(ctx),
-			},
-		)
+	if attributeWithValidators, ok := a.(fwxschema.AttributeWithValidators); ok {
+		for _, validator := range attributeWithValidators.GetValidators() {
+			logging.FrameworkDebug(
+				ctx,
+				"Calling provider defined AttributeValidator",
+				map[string]interface{}{
+					logging.KeyDescription: validator.Description(ctx),
+				},
+			)
+			validator.Validate(ctx, req, resp)
+			logging.FrameworkDebug(
+				ctx,
+				"Called provider defined AttributeValidator",
+				map[string]interface{}{
+					logging.KeyDescription: validator.Description(ctx),
+				},
+			)
+		}
 	}
 
 	AttributeValidateNestedAttributes(ctx, a, req, resp)
 
-	if a.DeprecationMessage != "" && attributeConfig != nil {
-		tfValue, err := attributeConfig.ToTerraformValue(ctx)
-		if err != nil {
-			resp.Diagnostics.AddAttributeError(
-				req.AttributePath,
-				"Attribute Validation Error",
-				"Attribute validation cannot convert value. Report this to the provider developer:\n\n"+err.Error(),
-			)
-
-			return
-		}
-
-		if !tfValue.IsNull() {
-			resp.Diagnostics.AddAttributeWarning(
-				req.AttributePath,
-				"Attribute Deprecated",
-				a.DeprecationMessage,
-			)
-		}
+	// Show deprecation warnings only for known values.
+	if a.GetDeprecationMessage() != "" && !attributeConfig.IsNull() && !attributeConfig.IsUnknown() {
+		resp.Diagnostics.AddAttributeWarning(
+			req.AttributePath,
+			"Attribute Deprecated",
+			a.GetDeprecationMessage(),
+		)
 	}
 }
 
@@ -133,32 +132,40 @@ func AttributeValidate(ctx context.Context, a tfsdk.Attribute, req tfsdk.Validat
 // The extra Attribute parameter is a carry-over of creating the proto6server
 // package from the tfsdk package and not wanting to export the method.
 // Reference: https://github.com/hashicorp/terraform-plugin-framework/issues/365
-func AttributeValidateNestedAttributes(ctx context.Context, a tfsdk.Attribute, req tfsdk.ValidateAttributeRequest, resp *tfsdk.ValidateAttributeResponse) {
-	if a.Attributes == nil || len(a.Attributes.GetAttributes()) == 0 {
+func AttributeValidateNestedAttributes(ctx context.Context, a fwschema.Attribute, req tfsdk.ValidateAttributeRequest, resp *tfsdk.ValidateAttributeResponse) {
+	if a.GetAttributes() == nil || len(a.GetAttributes().GetAttributes()) == 0 {
 		return
 	}
 
-	nm := a.Attributes.GetNestingMode()
+	nm := a.GetAttributes().GetNestingMode()
 	switch nm {
-	case tfsdk.NestingModeList:
-		l, ok := req.AttributeConfig.(types.List)
+	case fwschema.NestingModeList:
+		listVal, ok := req.AttributeConfig.(types.ListValuable)
 
 		if !ok {
 			err := fmt.Errorf("unknown attribute value type (%T) for nesting mode (%T) at path: %s", req.AttributeConfig, nm, req.AttributePath)
 			resp.Diagnostics.AddAttributeError(
 				req.AttributePath,
-				"Attribute Validation Error",
-				"Attribute validation cannot walk schema. Report this to the provider developer:\n\n"+err.Error(),
+				"Attribute Validation Error Invalid Value Type",
+				"A type that implements types.ListValuable is expected here. Report this to the provider developer:\n\n"+err.Error(),
 			)
 
 			return
 		}
 
-		for idx := range l.Elems {
-			for nestedName, nestedAttr := range a.Attributes.GetAttributes() {
+		l, diags := listVal.ToListValue(ctx)
+
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		for idx := range l.Elements() {
+			for nestedName, nestedAttr := range a.GetAttributes().GetAttributes() {
 				nestedAttrReq := tfsdk.ValidateAttributeRequest{
-					AttributePath: req.AttributePath.WithElementKeyInt(idx).WithAttributeName(nestedName),
-					Config:        req.Config,
+					AttributePath:           req.AttributePath.AtListIndex(idx).AtName(nestedName),
+					AttributePathExpression: req.AttributePathExpression.AtListIndex(idx).AtName(nestedName),
+					Config:                  req.Config,
 				}
 				nestedAttrResp := &tfsdk.ValidateAttributeResponse{
 					Diagnostics: resp.Diagnostics,
@@ -169,37 +176,33 @@ func AttributeValidateNestedAttributes(ctx context.Context, a tfsdk.Attribute, r
 				resp.Diagnostics = nestedAttrResp.Diagnostics
 			}
 		}
-	case tfsdk.NestingModeSet:
-		s, ok := req.AttributeConfig.(types.Set)
+	case fwschema.NestingModeSet:
+		setVal, ok := req.AttributeConfig.(types.SetValuable)
 
 		if !ok {
 			err := fmt.Errorf("unknown attribute value type (%T) for nesting mode (%T) at path: %s", req.AttributeConfig, nm, req.AttributePath)
 			resp.Diagnostics.AddAttributeError(
 				req.AttributePath,
-				"Attribute Validation Error",
-				"Attribute validation cannot walk schema. Report this to the provider developer:\n\n"+err.Error(),
+				"Attribute Validation Error Invalid Value Type",
+				"A type that implements types.SetValuable is expected here. Report this to the provider developer:\n\n"+err.Error(),
 			)
 
 			return
 		}
 
-		for _, value := range s.Elems {
-			tfValue, err := value.ToTerraformValue(ctx)
-			if err != nil {
-				err := fmt.Errorf("error running ToTerraformValue on element value: %v", value)
-				resp.Diagnostics.AddAttributeError(
-					req.AttributePath,
-					"Attribute Validation Error",
-					"Attribute validation cannot convert element into a Terraform value. Report this to the provider developer:\n\n"+err.Error(),
-				)
+		s, diags := setVal.ToSetValue(ctx)
 
-				return
-			}
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 
-			for nestedName, nestedAttr := range a.Attributes.GetAttributes() {
+		for _, value := range s.Elements() {
+			for nestedName, nestedAttr := range a.GetAttributes().GetAttributes() {
 				nestedAttrReq := tfsdk.ValidateAttributeRequest{
-					AttributePath: req.AttributePath.WithElementKeyValue(tfValue).WithAttributeName(nestedName),
-					Config:        req.Config,
+					AttributePath:           req.AttributePath.AtSetValue(value).AtName(nestedName),
+					AttributePathExpression: req.AttributePathExpression.AtSetValue(value).AtName(nestedName),
+					Config:                  req.Config,
 				}
 				nestedAttrResp := &tfsdk.ValidateAttributeResponse{
 					Diagnostics: resp.Diagnostics,
@@ -210,25 +213,33 @@ func AttributeValidateNestedAttributes(ctx context.Context, a tfsdk.Attribute, r
 				resp.Diagnostics = nestedAttrResp.Diagnostics
 			}
 		}
-	case tfsdk.NestingModeMap:
-		m, ok := req.AttributeConfig.(types.Map)
+	case fwschema.NestingModeMap:
+		mapVal, ok := req.AttributeConfig.(types.MapValuable)
 
 		if !ok {
 			err := fmt.Errorf("unknown attribute value type (%T) for nesting mode (%T) at path: %s", req.AttributeConfig, nm, req.AttributePath)
 			resp.Diagnostics.AddAttributeError(
 				req.AttributePath,
-				"Attribute Validation Error",
-				"Attribute validation cannot walk schema. Report this to the provider developer:\n\n"+err.Error(),
+				"Attribute Validation Error Invalid Value Type",
+				"A type that implements types.MapValuable is expected here. Report this to the provider developer:\n\n"+err.Error(),
 			)
 
 			return
 		}
 
-		for key := range m.Elems {
-			for nestedName, nestedAttr := range a.Attributes.GetAttributes() {
+		m, diags := mapVal.ToMapValue(ctx)
+
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		for key := range m.Elements() {
+			for nestedName, nestedAttr := range a.GetAttributes().GetAttributes() {
 				nestedAttrReq := tfsdk.ValidateAttributeRequest{
-					AttributePath: req.AttributePath.WithElementKeyString(key).WithAttributeName(nestedName),
-					Config:        req.Config,
+					AttributePath:           req.AttributePath.AtMapKey(key).AtName(nestedName),
+					AttributePathExpression: req.AttributePathExpression.AtMapKey(key).AtName(nestedName),
+					Config:                  req.Config,
 				}
 				nestedAttrResp := &tfsdk.ValidateAttributeResponse{
 					Diagnostics: resp.Diagnostics,
@@ -239,34 +250,44 @@ func AttributeValidateNestedAttributes(ctx context.Context, a tfsdk.Attribute, r
 				resp.Diagnostics = nestedAttrResp.Diagnostics
 			}
 		}
-	case tfsdk.NestingModeSingle:
-		o, ok := req.AttributeConfig.(types.Object)
+	case fwschema.NestingModeSingle:
+		objectVal, ok := req.AttributeConfig.(types.ObjectValuable)
 
 		if !ok {
 			err := fmt.Errorf("unknown attribute value type (%T) for nesting mode (%T) at path: %s", req.AttributeConfig, nm, req.AttributePath)
 			resp.Diagnostics.AddAttributeError(
 				req.AttributePath,
-				"Attribute Validation Error",
-				"Attribute validation cannot walk schema. Report this to the provider developer:\n\n"+err.Error(),
+				"Attribute Validation Error Invalid Value Type",
+				"A type that implements types.ObjectValuable is expected here. Report this to the provider developer:\n\n"+err.Error(),
 			)
 
 			return
 		}
 
-		if !o.Null && !o.Unknown {
-			for nestedName, nestedAttr := range a.Attributes.GetAttributes() {
-				nestedAttrReq := tfsdk.ValidateAttributeRequest{
-					AttributePath: req.AttributePath.WithAttributeName(nestedName),
-					Config:        req.Config,
-				}
-				nestedAttrResp := &tfsdk.ValidateAttributeResponse{
-					Diagnostics: resp.Diagnostics,
-				}
+		o, diags := objectVal.ToObjectValue(ctx)
 
-				AttributeValidate(ctx, nestedAttr, nestedAttrReq, nestedAttrResp)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 
-				resp.Diagnostics = nestedAttrResp.Diagnostics
+		if o.IsNull() || o.IsUnknown() {
+			return
+		}
+
+		for nestedName, nestedAttr := range a.GetAttributes().GetAttributes() {
+			nestedAttrReq := tfsdk.ValidateAttributeRequest{
+				AttributePath:           req.AttributePath.AtName(nestedName),
+				AttributePathExpression: req.AttributePathExpression.AtName(nestedName),
+				Config:                  req.Config,
 			}
+			nestedAttrResp := &tfsdk.ValidateAttributeResponse{
+				Diagnostics: resp.Diagnostics,
+			}
+
+			AttributeValidate(ctx, nestedAttr, nestedAttrReq, nestedAttrResp)
+
+			resp.Diagnostics = nestedAttrResp.Diagnostics
 		}
 	default:
 		err := fmt.Errorf("unknown attribute validation nesting mode (%T: %v) at path: %s", nm, nm, req.AttributePath)

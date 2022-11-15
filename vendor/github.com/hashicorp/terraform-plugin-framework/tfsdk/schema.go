@@ -6,6 +6,10 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/internal/fwschema"
+	"github.com/hashicorp/terraform-plugin-framework/internal/totftypes"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
@@ -21,6 +25,9 @@ var (
 	// block, not an attribute. Use blockAtPath on the path instead.
 	ErrPathIsBlock = errors.New("path leads to block, not an attribute")
 )
+
+// Schema must satify the fwschema.Schema interface.
+var _ fwschema.Schema = Schema{}
 
 // Schema is used to define the shape of practitioner-provider information,
 // like resources, data sources, and providers. Think of it as a type
@@ -94,20 +101,37 @@ func (s Schema) ApplyTerraform5AttributePathStep(step tftypes.AttributePathStep)
 	return nil, fmt.Errorf("could not find attribute or block %q in schema", a)
 }
 
-// AttributeType returns a types.ObjectType composed from the schema types.
-func (s Schema) AttributeType() attr.Type {
-	attrTypes := map[string]attr.Type{}
-	for name, attr := range s.Attributes {
-		attrTypes[name] = attr.attributeType()
+// TypeAtPath returns the framework type at the given schema path.
+func (s Schema) TypeAtPath(ctx context.Context, schemaPath path.Path) (attr.Type, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	tftypesPath, tftypesDiags := totftypes.AttributePath(ctx, schemaPath)
+
+	diags.Append(tftypesDiags...)
+
+	if diags.HasError() {
+		return nil, diags
 	}
-	for name, block := range s.Blocks {
-		attrTypes[name] = block.attributeType()
+
+	attrType, err := s.TypeAtTerraformPath(ctx, tftypesPath)
+
+	if err != nil {
+		diags.AddAttributeError(
+			schemaPath,
+			"Invalid Schema Path",
+			"When attempting to get the framework type associated with a schema path, an unexpected error was returned. "+
+				"This is always an issue with the provider. Please report this to the provider developers.\n\n"+
+				fmt.Sprintf("Path: %s\n", schemaPath.String())+
+				fmt.Sprintf("Original Error: %s", err),
+		)
+		return nil, diags
 	}
-	return types.ObjectType{AttrTypes: attrTypes}
+
+	return attrType, diags
 }
 
-// AttributeTypeAtPath returns the attr.Type of the attribute at the given path.
-func (s Schema) AttributeTypeAtPath(path *tftypes.AttributePath) (attr.Type, error) {
+// TypeAtTerraformPath returns the framework type at the given tftypes path.
+func (s Schema) TypeAtTerraformPath(_ context.Context, path *tftypes.AttributePath) (attr.Type, error) {
 	rawType, remaining, err := tftypes.WalkAttributePath(s, path)
 	if err != nil {
 		return nil, fmt.Errorf("%v still remains in the path: %w", remaining, err)
@@ -116,37 +140,101 @@ func (s Schema) AttributeTypeAtPath(path *tftypes.AttributePath) (attr.Type, err
 	switch typ := rawType.(type) {
 	case attr.Type:
 		return typ, nil
-	case nestedAttributes:
-		return typ.AttributeType(), nil
-	case nestedBlock:
-		return typ.Block.attributeType(), nil
+	case fwschema.UnderlyingAttributes:
+		return typ.Type(), nil
+	case fwschema.NestedBlock:
+		return typ.Block.Type(), nil
 	case Attribute:
-		return typ.attributeType(), nil
+		return typ.FrameworkType(), nil
 	case Block:
-		return typ.attributeType(), nil
+		return typ.Type(), nil
 	case Schema:
-		return typ.AttributeType(), nil
+		return typ.Type(), nil
 	default:
 		return nil, fmt.Errorf("got unexpected type %T", rawType)
 	}
 }
 
-// TerraformType returns a tftypes.Type that can represent the schema.
-func (s Schema) TerraformType(ctx context.Context) tftypes.Type {
-	attrTypes := map[string]tftypes.Type{}
+// GetAttributes satisfies the fwschema.Schema interface.
+func (s Schema) GetAttributes() map[string]fwschema.Attribute {
+	return schemaAttributes(s.Attributes)
+}
+
+// GetBlocks satisfies the fwschema.Schema interface.
+func (s Schema) GetBlocks() map[string]fwschema.Block {
+	return schemaBlocks(s.Blocks)
+}
+
+// GetDeprecationMessage satisfies the fwschema.Schema interface.
+func (s Schema) GetDeprecationMessage() string {
+	return s.DeprecationMessage
+}
+
+// GetDescription satisfies the fwschema.Schema interface.
+func (s Schema) GetDescription() string {
+	return s.Description
+}
+
+// GetMarkdownDescription satisfies the fwschema.Schema interface.
+func (s Schema) GetMarkdownDescription() string {
+	return s.MarkdownDescription
+}
+
+// GetVersion satisfies the fwschema.Schema interface.
+func (s Schema) GetVersion() int64 {
+	return s.Version
+}
+
+// Type returns the framework type of the schema.
+func (s Schema) Type() attr.Type {
+	attrTypes := map[string]attr.Type{}
+
 	for name, attr := range s.Attributes {
-		attrTypes[name] = attr.terraformType(ctx)
+		attrTypes[name] = attr.FrameworkType()
 	}
+
 	for name, block := range s.Blocks {
-		attrTypes[name] = block.terraformType(ctx)
+		attrTypes[name] = block.Type()
 	}
-	return tftypes.Object{AttributeTypes: attrTypes}
+
+	return types.ObjectType{AttrTypes: attrTypes}
 }
 
 // AttributeAtPath returns the Attribute at the passed path. If the path points
 // to an element or attribute of a complex type, rather than to an Attribute,
 // it will return an ErrPathInsideAtomicAttribute error.
-func (s Schema) AttributeAtPath(path *tftypes.AttributePath) (Attribute, error) {
+func (s Schema) AttributeAtPath(ctx context.Context, schemaPath path.Path) (fwschema.Attribute, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	tftypesPath, tftypesDiags := totftypes.AttributePath(ctx, schemaPath)
+
+	diags.Append(tftypesDiags...)
+
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	attribute, err := s.AttributeAtTerraformPath(ctx, tftypesPath)
+
+	if err != nil {
+		diags.AddAttributeError(
+			schemaPath,
+			"Invalid Schema Path",
+			"When attempting to get the framework attribute associated with a schema path, an unexpected error was returned. "+
+				"This is always an issue with the provider. Please report this to the provider developers.\n\n"+
+				fmt.Sprintf("Path: %s\n", schemaPath.String())+
+				fmt.Sprintf("Original Error: %s", err),
+		)
+		return nil, diags
+	}
+
+	return attribute, diags
+}
+
+// AttributeAtPath returns the Attribute at the passed path. If the path points
+// to an element or attribute of a complex type, rather than to an Attribute,
+// it will return an ErrPathInsideAtomicAttribute error.
+func (s Schema) AttributeAtTerraformPath(_ context.Context, path *tftypes.AttributePath) (fwschema.Attribute, error) {
 	res, remaining, err := tftypes.WalkAttributePath(s, path)
 	if err != nil {
 		return Attribute{}, fmt.Errorf("%v still remains in the path: %w", remaining, err)
@@ -155,15 +243,37 @@ func (s Schema) AttributeAtPath(path *tftypes.AttributePath) (Attribute, error) 
 	switch r := res.(type) {
 	case attr.Type:
 		return Attribute{}, ErrPathInsideAtomicAttribute
-	case nestedAttributes:
+	case fwschema.UnderlyingAttributes:
 		return Attribute{}, ErrPathInsideAtomicAttribute
-	case nestedBlock:
+	case fwschema.NestedBlock:
 		return Attribute{}, ErrPathInsideAtomicAttribute
-	case Attribute:
+	case fwschema.Attribute:
 		return r, nil
 	case Block:
 		return Attribute{}, ErrPathIsBlock
 	default:
 		return Attribute{}, fmt.Errorf("got unexpected type %T", res)
 	}
+}
+
+// schemaAttributes is a tfsdk to fwschema type conversion function.
+func schemaAttributes(attributes map[string]Attribute) map[string]fwschema.Attribute {
+	result := make(map[string]fwschema.Attribute, len(attributes))
+
+	for name, attribute := range attributes {
+		result[name] = attribute
+	}
+
+	return result
+}
+
+// schemaBlocks is a tfsdk to fwschema type conversion function.
+func schemaBlocks(blocks map[string]Block) map[string]fwschema.Block {
+	result := make(map[string]fwschema.Block, len(blocks))
+
+	for name, block := range blocks {
+		result[name] = block
+	}
+
+	return result
 }
